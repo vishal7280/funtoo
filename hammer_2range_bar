@@ -1,0 +1,462 @@
+#include <FastLED.h>
+#include <EEPROM.h>
+#include <SoftwareSerial.h>
+#include "DFRobotDFPlayerMini.h"
+#include <EEPROM.h>
+#define EEPROM_SIZE 12
+#include <SoftwareSerial.h>
+#include <DFRobotDFPlayerMini.h>
+
+// First DFPlayer Mini
+SoftwareSerial mySerial1(12, 19);  // RX, TX for first DFPlayer Mini
+DFRobotDFPlayerMini myDFPlayer1;
+
+// Second DFPlayer Mini
+SoftwareSerial mySerial2(33, 32);  // RX, TX for second DFPlayer Mini
+DFRobotDFPlayerMini myDFPlayer2;
+
+
+//--------------------------------------
+#include <WS2812FX.h>
+
+#define LED_COUNT 400
+
+
+#define TIMER_MS 5000
+//----------------------------------------
+SoftwareSerial mySoftwareSerial(33, 32);  // RX, TX
+DFRobotDFPlayerMini myDFPlayer;
+
+
+//------------------PINS AND THEIR CONNECTIONS------------------
+
+#define IR_SENSOR_1 35  //// CONNECTED TO SIGNAL1
+#define IR_SENSOR_2 25  //// CONNECTED TO SIGNAL2
+#define LED_PIN1 18     //// CONNECTED TO RANGE BAR1
+#define LED_PIN2 13     //// CONNECTED TO RANGE BAR 2
+#define song_change 34  //// CONNECTED TO song_change 3--SW3
+//#define song_change2 39      //// CONNECTED TO song_change 2--SW2
+
+
+//------------------DEFINE NO OF LEDS--------------------------
+
+#define NUM_LEDS 400           /// NO. TOTAL LED COUNTS IN RGB STRIPS
+#define NUM_LEDS_score 21 * 3  // Total number of LEDs for five displays (21 LEDs each)
+
+
+
+CRGB leds1[NUM_LEDS];
+CRGB leds2[NUM_LEDS];
+CRGB leds_score[NUM_LEDS_score];  // Define LEDs strip for all displays
+#define NUM_LEDS_score 63         // Total number of LEDs for five displays (21 LEDs each)
+//int Score1, Score2, Score3;
+char Fd1 = 0, Fd2 = 0, Fd3 = 0, Fd4 = 0, Fd5 = 0;  // Variables for number of digits in each display
+
+byte digits[10][7] = {
+  { 1, 1, 1, 1, 1, 1, 0 },  // Digit 0
+  { 0, 1, 1, 0, 0, 0, 0 },  // Digit 1
+  { 1, 1, 0, 1, 1, 0, 1 },  // Digit 2
+  { 1, 1, 1, 1, 0, 0, 1 },  // Digit 3
+  { 0, 1, 1, 0, 0, 1, 1 },  // Digit 4
+  { 1, 0, 1, 1, 0, 1, 1 },  // Digit 5
+  { 1, 0, 1, 1, 1, 1, 1 },  // Digit 6
+  { 1, 1, 1, 0, 0, 0, 0 },  // Digit 7
+  { 1, 1, 1, 1, 1, 1, 1 },  // Digit 8
+  { 1, 1, 1, 1, 0, 1, 1 }   // Digit 9
+};                          // 2D Array for numbers on 7-segment
+
+//--------------------------------------------------------------
+int str = 2000;  // for adult
+//int str=5000;  // for women
+//int str=5500;  // for adult child
+
+int pass_ST = 0;
+int pass_S1;
+int pass_S2;
+int hue = 0;
+int count = 0;
+//int Turns = 0;
+int Raw_score = 0;
+int score = 0;
+int range_bar_length = 0;
+int Score1_Raw = 0;
+int Score2_Raw = 0;
+int Score1 = 0;
+int Score2 = 0;
+int Score3 = 714;
+int address = 0;
+int Highestscore = 714;
+int turn = 0;
+int timer = 0;
+
+
+//--------------------intrupt rutiens---------------------------
+void IRAM_ATTR isr0() {
+  pass_S1++;
+}
+void IRAM_ATTR isr1() {
+  pass_S2++;
+}
+void IRAM_ATTR isr2() {
+  pass_ST = pass_ST + 1;
+}
+
+//---------------------------3segment score board declearation----------------------
+
+//----------------------------------------------------------------------------------
+
+
+void setup() {
+  Serial.begin(115200);
+  EEPROM.begin(EEPROM_SIZE);
+
+  mySerial1.begin(9600);
+  myDFPlayer1.begin(mySerial1);
+ // Serial.println("First DFPlayer Mini online.");
+  myDFPlayer1.volume(20);  // Set initial volume (0-30)
+ // Serial.println("Set volume of first DFPlayer Mini to 15");
+
+  // Initialize second DFPlayer Mini
+  mySerial2.begin(9600);
+  myDFPlayer2.begin(mySerial2);
+ // Serial.println("Second DFPlayer Mini online.");
+  myDFPlayer2.volume(20);  // Set initial volume (0-30)
+ // Serial.println("Set volume of second DFPlayer Mini to 15");
+  //randNumber1=3;
+  pinMode(IR_SENSOR_1, INPUT_PULLUP);
+  pinMode(IR_SENSOR_2, INPUT_PULLUP);
+  pinMode(song_change, INPUT_PULLUP);
+  //pinMode(song_change2, INPUT_PULLUP);
+
+  //-------------------------
+
+  //------------------
+
+
+  FastLED.addLeds<WS2812B, LED_PIN1, GRB>(leds1, NUM_LEDS);
+  FastLED.addLeds<WS2812B, LED_PIN2, GRB>(leds2, NUM_LEDS);
+  FastLED.addLeds<WS2812B, 27, GRB>(leds_score, NUM_LEDS_score);
+
+
+
+  myDFPlayer2.advertise(1);  // Play the advertisement track 4 on second player
+
+  FastLED.setBrightness(255);
+
+  delay(1000);
+  pass_ST = 0;
+  Score3 = Highestscore - 1;
+  Display3rdScore();
+  FastLED.show();
+  start_up();  // START_UP EFFECT IN LOOP
+}
+
+void start_up() {
+  //Serial.println("inside startup");
+  pass_ST = 0;
+
+  hue = 0;
+  count = 0;
+  // Turns = 0;
+  Raw_score = 0;
+  score = 0;
+  range_bar_length = 0;
+  Score1_Raw = 0;
+  Score2_Raw = 0;
+  Score1 = 0;
+  Score2 = 0;
+  Score3 = 0;
+  address = 0;
+  timer = 0;
+  int next = 1;
+
+
+
+  while (1) {
+    if (digitalRead(song_change) == 0) {
+      
+      next++;
+      if (next == 9) {
+        next = 1;
+        Serial.print("next");
+        Serial.println(next);
+      }
+      Serial.print("next=");
+      Serial.println(next);
+      myDFPlayer2.advertise(next);  ///background sound
+      delay(500);
+    }
+
+    if (turn == 1) {
+      for (int i = 0; i < NUM_LEDS; i++) {
+        // leds[i] = CHSV(hue, 255, 255);
+        // leds1[i] = CHSV(hue + (i * 4), 255, 255);
+
+        leds2[i] = CHSV(hue + (i * 4), 255, 255);
+      }
+    } else {
+      for (int i = 0; i < NUM_LEDS; i++) {
+        // leds[i] = CHSV(hue, 255, 255);
+        leds1[i] = CHSV(hue + (i * 4), 255, 255);
+
+        leds2[i] = CHSV(hue + (i * 4), 255, 255);
+      }
+    }
+
+    hue++;
+    FastLED.show();
+
+    pass_ST = digitalRead(IR_SENSOR_1);
+    Serial.print("pass for while =");
+    Serial.println(pass_ST);
+   // delay(200);
+    if (pass_ST == 1) {
+      break;
+    }
+  }
+  
+  myDFPlayer1.playMp3Folder(2);
+  Serial.println("while loop break");
+
+
+  for (int i = NUM_LEDS; i >= 0.; i--) {
+    if (turn == 1) {
+      leds2[i] = CRGB::Black;
+    } else {
+      leds1[i] = CRGB::Black;
+      leds2[i] = CRGB::Black;
+    }
+
+
+    FastLED.show();
+    // delayMicroseconds(200);
+    //delay(1);
+  }
+
+  if (turn == 1) {
+    for (int i = 21; i < 21 * 2; i++) {
+      leds_score[i] = CRGB::Black;
+
+      FastLED.show();
+      //  delay(5);
+    }
+  } else {
+    for (int i = 0; i < 21 * 2; i++) {
+      leds_score[i] = CRGB::Black;
+
+      FastLED.show();
+
+      // delay();
+    }
+  }
+
+  if (turn == 0) {
+    for (int i = 0; i < 25; i++) {
+      leds1[i] = CRGB::Green;
+      FastLED.show();
+      // delay(5);
+    }
+  }
+  if (turn == 1) {
+    for (int i = 0; i < 25; i++) {
+      leds2[i] = CRGB::Green;
+
+      FastLED.show();
+      // delay(5);
+    }
+  }
+}
+void loop() {
+  pass_S1 = digitalRead(IR_SENSOR_1);
+  pass_S2 = digitalRead(IR_SENSOR_2);
+
+
+
+
+
+  if (pass_S1 == 0) {
+    //Serial.println("ir one pass");      //---------------------------count starts with first sensor
+    count++;
+
+    if (pass_S2 == 0) {  //---------------------------second sensor hit and count stops
+      Serial.println("ir two pass");
+
+      Serial.print("COUNT= ");
+      Serial.println(count);
+
+      if (count > str) {
+        count = str;
+      }
+      Raw_score = str - count;
+      score = map(count, str, 0, 0, 1300);
+
+      if (score > 735 && score < 755) {
+        score = score * 1.04;
+      } else if (score > 755 && score < 765) {
+        score = score * 1.02;
+      } else if (score > 765 && score < 775) {
+        score = score * 1.08;
+      } else if (score > 775) {
+        score = score * 1.1;
+      }
+
+      range_bar_length = score / 60;
+      if (score == 0) {
+        score = 10;
+        range_bar_length = 1;
+      }
+      //       if (score > 1200) {
+      //   ESP.restart();
+      // }
+      if (score > 999) {
+        score = 999;
+        range_bar_length = 16;
+      }
+
+      Serial.print("Score= ");
+      Serial.println(score);
+      Serial.print("range_bar_length= ");
+      //Serial.println(range_bar_length);
+
+
+      for (int j = 0; j < range_bar_length; j++) {
+        int countt = (j * 50) + 50;
+
+
+        // Light up LEDs in bunch
+        for (int i = j * 25; i < j * 25 + 25; i++) {
+          if (turn == 0) {
+            leds1[i] = leds1[i] = CHSV(j * 50, 255, 255);
+          }
+          if (turn == 1) {
+            leds2[i] = leds2[i] = CHSV(j * 50, 255, 255);
+          }
+        }
+
+        delay(countt);
+        FastLED.show();
+        hue++;
+      }
+      //Serial.println("Rangebar done");
+
+      for (int i = 0; i < score; i++) {
+        if (turn == 0) {
+          Score1 = i;
+          Display1stScore();
+          FastLED.show();
+          delayMicroseconds(500);
+        }
+        if (turn == 1) {
+          Score2 = i;
+          Display2ndScore();
+          FastLED.show();
+          delayMicroseconds(500);
+        }
+      }
+      //Serial.println("score done");
+
+      if (score > Highestscore) {
+        Highestscore = score;
+        Score3 = score - 1;
+        Display3rdScore();
+        FastLED.show();
+         myDFPlayer1.playMp3Folder(7);
+        delayMicroseconds(5000);
+      }
+      //myDFPlayer.pause();
+
+
+
+
+
+
+      delay(5000);
+      turn++;
+      Serial.print("turn=");
+      Serial.println(turn);
+      if (turn > 1) {
+        turn = 0;
+      }
+      start_up();
+    }
+  }
+}
+
+
+
+void Display1stScore() {
+  int cursor = 21;  // Last LED for first display
+
+  Fd1 = (Score1 < 10) ? 1 : (Score1 < 100) ? 2
+                                           : 3;
+
+  for (int i = 1; i <= Fd1; i++) {
+    int digit = 0;
+    if (i == 1) {
+      cursor = 14;
+      digit = Score1 % 10;
+    } else if (i == 2) {
+      cursor = 7;
+      digit = (Score1 / 10 % 10);
+    } else if (i == 3) {
+      cursor = 0;
+      digit = (Score1 / 100 % 10);
+    }
+    for (int k = 0; k <= 6; k++) {
+      leds_score[cursor] = digits[digit][k] ? CRGB::Blue : 0x000000;
+      cursor++;
+    }
+  }
+}
+
+// Function to display score on the second 7-segment display (next 21 LEDs)
+void Display2ndScore() {
+  int cursor = 42;  // Last LED for second display
+
+  Fd2 = (Score2 < 10) ? 1 : (Score2 < 100) ? 2
+                                           : 3;
+
+  for (int i = 1; i <= Fd2; i++) {
+    int digit = 0;
+    if (i == 1) {
+      cursor = 35;
+      digit = Score2 % 10;
+    } else if (i == 2) {
+      cursor = 28;
+      digit = (Score2 / 10 % 10);
+    } else if (i == 3) {
+      cursor = 21;
+      digit = (Score2 / 100 % 10);
+    }
+    for (int k = 0; k <= 6; k++) {
+      leds_score[cursor] = digits[digit][k] ? CRGB::Blue : 0x000000;
+      cursor++;
+    }
+  }
+}
+
+// Function to display score on the third 7-segment display (next 21 LEDs)
+void Display3rdScore() {
+  int cursor = 63;  // Last LED for third display
+
+  Fd3 = (Score3 < 10) ? 1 : (Score3 < 100) ? 2
+                                           : 3;
+
+  for (int i = 1; i <= Fd3; i++) {
+    int digit = 0;
+    if (i == 1) {
+      cursor = 56;
+      digit = Score3 % 10;
+    } else if (i == 2) {
+      cursor = 49;
+      digit = (Score3 / 10 % 10);
+    } else if (i == 3) {
+      cursor = 42;
+      digit = (Score3 / 100 % 10);
+    }
+    for (int k = 0; k <= 6; k++) {
+      leds_score[cursor] = digits[digit][k] ? CRGB::Red : 0x000000;
+      cursor++;
+    }
+  }
+}
