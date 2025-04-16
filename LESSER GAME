@@ -1,0 +1,194 @@
+#include <FastLED.h>
+
+#define NUM_LEDS 21
+#define button_pin 36         // Start/Restart button
+#define pause_pin 39          // Pause-only button
+#define LDR_PIN 25
+#define BUZZER_PIN 13
+
+CRGB leds1ST[NUM_LEDS];
+CRGB ledsTimer[NUM_LEDS];
+
+int Score1;
+int timerSeconds = 600; // 10 minutes
+bool timerRunning = false;
+unsigned long lastTimerUpdate = 0;
+
+int laserBlockCount = 0;
+bool previousState = HIGH;
+
+// Debounce variables for start button
+bool lastButtonState = HIGH;
+bool currentButtonState;
+unsigned long lastDebounceTime = 0;
+const unsigned long debounceDelay = 50;
+
+// Debounce variables for pause button
+bool lastPauseState = HIGH;
+bool currentPauseState = HIGH;
+unsigned long lastPauseDebounceTime = 0;
+const unsigned long pauseDebounceDelay = 50;
+
+byte digits[10][7] = {
+  {1, 1, 1, 1, 1, 1, 0},
+  {0, 1, 1, 0, 0, 0, 0},
+  {1, 1, 0, 1, 1, 0, 1},
+  {1, 1, 1, 1, 0, 0, 1},
+  {0, 1, 1, 0, 0, 1, 1},
+  {1, 0, 1, 1, 0, 1, 1},
+  {1, 0, 1, 1, 1, 1, 1},
+  {1, 1, 1, 0, 0, 0, 0},
+  {1, 1, 1, 1, 1, 1, 1},
+  {1, 1, 1, 1, 0, 1, 1}
+};
+
+void setup() {
+  FastLED.addLeds<WS2812B, 23, RGB>(leds1ST, NUM_LEDS);
+  FastLED.addLeds<WS2812B, 26, RGB>(ledsTimer, NUM_LEDS);
+  FastLED.setBrightness(50);
+
+  pinMode(button_pin, INPUT_PULLUP);
+  pinMode(pause_pin, INPUT_PULLUP);
+  pinMode(LDR_PIN, INPUT);
+  pinMode(BUZZER_PIN, OUTPUT);
+
+  Serial.begin(9600);
+  randomSeed(analogRead(0));
+}
+
+void loop() {
+  // --- Start/Restart Button Handling (GPIO 36) ---
+  int reading = digitalRead(button_pin);
+  if (reading != lastButtonState) {
+    lastDebounceTime = millis();
+  }
+
+  if ((millis() - lastDebounceTime) > debounceDelay) {
+    if (reading != currentButtonState) {
+      currentButtonState = reading;
+
+      if (currentButtonState == LOW) {
+        // === Always Reset and Start the Game ===
+        timerRunning = true;
+        timerSeconds = 600;
+        laserBlockCount = 0;
+        Score1 = 0;
+        FastLED.clear();
+        FastLED.show();
+        previousState = HIGH;
+
+        Serial.println("Game Started / Restarted");
+        lastTimerUpdate = millis();
+
+        DisplayTimer(timerSeconds);
+        Display1stScore();
+      }
+    }
+  }
+  lastButtonState = reading;
+
+  // --- Pause Button Handling (GPIO 39) ---
+  int pauseReading = digitalRead(pause_pin);
+  if (pauseReading != lastPauseState) {
+    lastPauseDebounceTime = millis();
+  }
+
+  if ((millis() - lastPauseDebounceTime) > pauseDebounceDelay) {
+    if (pauseReading != currentPauseState) {
+      currentPauseState = pauseReading;
+
+      if (currentPauseState == LOW && timerRunning) {
+        timerRunning = false;
+        Serial.println("Game Paused");
+      }
+    }
+  }
+  lastPauseState = pauseReading;
+
+  // --- Main Game Logic ---
+  if (timerRunning) {
+    // Countdown timer
+    if (millis() - lastTimerUpdate >= 1000) {
+      if (timerSeconds > 0) {
+        timerSeconds--;
+        lastTimerUpdate = millis();
+        Serial.print("Time Left: ");
+        Serial.println(timerSeconds);
+        DisplayTimer(timerSeconds);
+      } else {
+        timerRunning = false;
+        Serial.println("Time's up!");
+      }
+    }
+
+    // Laser break detection
+    int ldrValue = digitalRead(LDR_PIN);
+    if (ldrValue == LOW && previousState == HIGH) {
+      laserBlockCount++;
+      Score1 = laserBlockCount;
+
+      Serial.print("Laser Blocked! Count: ");
+      Serial.println(laserBlockCount);
+
+      // Beep buzzer
+      digitalWrite(BUZZER_PIN, HIGH);
+      delay(100);
+      digitalWrite(BUZZER_PIN, LOW);
+
+      Display1stScore();
+      FastLED.show();
+      delay(300);
+    }
+    previousState = ldrValue;
+  }
+}
+
+// === Display Functions ===
+void Display1stScore() {
+  int cursor = 21;
+  char Fd = (Score1 < 10) ? 1 : (Score1 < 100 ? 2 : 3);
+
+  for (int i = 1; i <= Fd; i++) {
+    int digit = 0;
+    if (i == 1) {
+      cursor = 14;
+      digit = (Score1 % 10);
+    } else if (i == 2) {
+      cursor = 7;
+      digit = (Score1 / 10) % 10;
+    } else if (i == 3) {
+      cursor = 0;
+      digit = (Score1 / 100) % 10;
+    }
+
+    for (int k = 0; k <= 6; k++) {
+      leds1ST[cursor] = digits[digit][k] ? CRGB::Red : CRGB::Black;
+      cursor++;
+    }
+  }
+}
+
+void DisplayTimer(int seconds) {
+  int cursor = 21;
+  char Fd = (seconds < 10) ? 1 : (seconds < 100 ? 2 : 3);
+
+  for (int i = 1; i <= Fd; i++) {
+    int digit = 0;
+    if (i == 1) {
+      cursor = 14;
+      digit = (seconds % 10);
+    } else if (i == 2) {
+      cursor = 7;
+      digit = (seconds / 10) % 10;
+    } else if (i == 3) {
+      cursor = 0;
+      digit = (seconds / 100) % 10;
+    }
+
+    for (int k = 0; k <= 6; k++) {
+      ledsTimer[cursor] = digits[digit][k] ? CRGB::Red : CRGB::Black;
+      cursor++;
+    }
+  }
+  FastLED.show();
+}
