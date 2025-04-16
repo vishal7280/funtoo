@@ -1,0 +1,372 @@
+#include <stdlib.h>  // For malloc() and realloc()
+#include <Wire.h>
+#include <PCF8574.h>
+#include <SoftwareSerial.h>
+#include <DFRobotDFPlayerMini.h>
+#define starts 26
+#define startbutton 36
+#define buzzer 25
+#define song_change 34  //// CONNECTED TO song_change 3--SW3
+
+   //DFPlayer Mini
+SoftwareSerial mySerial(33, 32);  // RX, TX for second DFPlayer Mini
+DFRobotDFPlayerMini myDFPlayer;
+
+#include <FastLED.h>
+#define NUM_LEDS_timer 21
+//#define button_pin 34 
+// Set I2C addresses
+PCF8574 pcf8574_ONE_INPUT(0x20);
+PCF8574 pcf8574_ONE_OUTPUT(0x38);
+int a=0;
+int score=0;
+int* randomArray;
+int arraySize = 10;
+int randomno;
+int previousno = -1;  // Initialize to an impossible value
+int y = 1;
+int pass=1;
+int Score2;
+int val=0;
+
+int timer=0;
+int next = 1;
+CRGB leds1ST_score[NUM_LEDS_timer];          // Define LEDs strip
+char Fd = 0;
+int randNumber1 = 1;
+
+byte digits[10][7] =  {{1, 1, 1, 1, 1, 1, 0}, // Digit 0
+  {0, 1, 1, 0, 0, 0, 0}, // Digit 1
+  {1, 1, 0, 1, 1, 0, 1}, // Digit 2
+  {1, 1, 1, 1, 0, 0, 1}, // Digit 3
+  {0, 1, 1, 0, 0, 1, 1}, // Digit 4
+  {1, 0, 1, 1, 0, 1, 1}, // Digit 5
+  {1, 0, 1, 1, 1, 1, 1}, // Digit 6
+  {1, 1, 1, 0, 0, 0, 0}, // Digit 7
+  {1, 1, 1, 1, 1, 1, 1}, // Digit 8
+  {1, 1, 1, 1, 0, 1, 1} // Digit 9
+};                   // 2D Array for numbers on 7 segment
+long ColorTable[21] =
+{
+  CRGB::Amethyst,     //white
+  CRGB::Aqua,         //pink
+  CRGB::Blue,         //Blue
+  CRGB::Chartreuse,   // Gold
+  CRGB::DarkGreen,    //Red
+  CRGB::DarkMagenta,  //Aqua
+  CRGB::DarkOrange,   // yellow green
+  CRGB::DeepPink,     //Aqua
+  CRGB::Fuchsia,      //Sea blue
+  CRGB::Gold,         //Gold
+  CRGB::GreenYellow,  //off white
+  CRGB::LightCoral,   //white
+  CRGB::Tomato,       //white
+  CRGB::Salmon,       //Pure white
+  CRGB::Red,          // Drak Green
+  CRGB::Orchid,       //blue white
+  CRGB::Sienna,       //yellow white
+  CRGB::Purple,       // aqua
+  CRGB::DarkOrange,   //yellow green
+  CRGB::FloralWhite,  //white
+  CRGB::Yellow        //yellow
+};
+
+void setup() {
+  Serial.begin(115200);
+
+   // Initialize DFPlayer Mini
+  mySerial.begin(9600);
+  myDFPlayer.begin(mySerial);
+  // Serial.println("Second DFPlayer Mini online.");
+  myDFPlayer.volume(35);  // Set initial volume (0-30)
+                           // Serial.println("Set volume of second DFPlayer Mini to 15");
+  randomArray = (int*) malloc(arraySize * sizeof(int));  // Allocate initial array
+ if (pcf8574_ONE_INPUT.begin()&&pcf8574_ONE_OUTPUT.begin()){
+   Serial.println("OK");
+  } else {
+    Serial.println("KO");
+  }
+  pinMode(startbutton,INPUT);
+  pinMode(buzzer,OUTPUT);
+  pinMode(song_change, INPUT_PULLUP);
+  pinMode(starts,INPUT_PULLUP);
+ 
+  myDFPlayer.advertise(1);  // Play the advertisement track 4 on second player
+
+
+  if (randomArray == NULL) {
+    Serial.println("Memory allocation failed");
+    while (1);  // Stop the program
+  }
+
+  // Set all pins as input for pcf8574_INPUT
+  for (int i = 0; i < 4; i++) {
+    pcf8574_ONE_INPUT.pinMode(i, INPUT);
+  }
+
+  // Set all pins as input for pcf8574_TWO_INPUT
+  for (int i = 0; i < 4; i++) {
+    pcf8574_ONE_OUTPUT.pinMode(i, OUTPUT);
+  }
+  for (int i = 0; i < 4; i++) {
+    pcf8574_ONE_OUTPUT.digitalWrite(i,LOW);
+  }
+
+delay(500);
+  for (int i = 0; i < 4; i++) {
+    pcf8574_ONE_OUTPUT.digitalWrite(i,HIGH);
+  }
+  delay(500);
+  startup();
+
+ FastLED.addLeds<WS2812B, 27, GRB>(leds1ST_score, NUM_LEDS_timer);
+ FastLED.setBrightness(255);
+}
+
+void startup(){
+  while(1){
+if (digitalRead(song_change) == 0) {
+
+      next++;
+      if (next == 9) {
+        next = 1;
+        Serial.print("next");
+        Serial.println(next);
+      }
+      Serial.print("next=");
+      Serial.println(next);
+      myDFPlayer.advertise(next);  ///background sound
+      delay(500);
+    }
+
+
+    pcf8574_ONE_OUTPUT.digitalWrite(0,LOW);
+  //  pcf8574_ONE_OUTPUT.digitalWrite(4,LOW);
+    delay(500);
+    pcf8574_ONE_OUTPUT.digitalWrite(0,HIGH);
+   // pcf8574_ONE_OUTPUT.digitalWrite(4,HIGH);
+    delay(500);
+    if (digitalRead(starts) == HIGH || pcf8574_ONE_INPUT.digitalRead(0) == 0){
+      
+       for (int i = 0; i < 3; i++) {   // Beep three times for reset
+    digitalWrite(buzzer, HIGH);
+    delay(200);   // Longer beep
+    digitalWrite(buzzer, LOW);
+    delay(100);   // Pause between beeps
+  }
+     score = 0;
+      Score2 = 0;
+      a = 0;
+      y = 1;
+      pass = 1;
+      Serial.println("Score Reset to 0");
+
+      // Update LED Display to show score = 0
+      Display1stScore();
+      FastLED.show(); // Refresh the LED scoreboard
+
+      break;
+      }
+    }
+        for (int i = 0; i < 4; i++) {
+    pcf8574_ONE_OUTPUT.digitalWrite(i,LOW);
+    delay(60);
+     }
+    delay(200);
+    for (int i = 0; i < 4; i++) {
+    pcf8574_ONE_OUTPUT.digitalWrite(i,HIGH);
+    }
+    delay(1500);
+    Serial.println("exited loop ");
+  }
+
+
+int randomgenrate(int a, int b) {
+  randomno = random(a, b);
+  while (previousno == randomno) {
+    randomno = random(a, b);
+  }
+  previousno = randomno;  // Update previousno
+  return randomno;
+}
+
+void resizeArray(int newSize) {
+  int* temp = (int*) realloc(randomArray, newSize * sizeof(int));
+  if (temp == NULL) {
+    Serial.println("Memory reallocation failed");
+    free(randomArray);  // Free the originally allocated memory
+    while (1);  // Stop the program
+  }
+  randomArray = temp;
+  arraySize = newSize;
+}
+
+void loop() {
+
+
+
+
+
+
+  // Resize the array if needed
+  resizeArray(y);
+  Serial.print("y= "); Serial.println(y-1);
+randomArray[y-1] = randomgenrate(0,4);
+//  for (int i = 0; i < arraySize; i++) {
+//    randomArray[i] = randomgenrate(0,8);  // Fill the array with random numbers between 0 and 7
+//  }
+
+  // Print the array
+    Serial.print("Array1= [");
+  for (int i = 0; i < arraySize; i++) {
+    Serial.print(randomArray[i]);
+     
+    pcf8574_ONE_OUTPUT.digitalWrite(randomArray[i],LOW);
+    delay(300);
+    pcf8574_ONE_OUTPUT.digitalWrite(randomArray[i],HIGH);
+    delay(300);
+    Serial.print(" ");
+  }
+  Serial.println("]");
+  y++;
+  if (y == 50) {
+    y = 1;
+  }
+while(1){
+  
+  for (int i = 0; i < 4; i++) {
+    uint8_t val = pcf8574_ONE_INPUT.digitalRead(i);
+    if (val == LOW) {
+      Serial.print("pcf8574_ONE_INPUT - KEY"); Serial.print(i); Serial.println(" PRESSED");
+      Serial.print("i=");Serial.print(i);Serial.print("  ramdom array");Serial.println(randomArray[a]);
+          digitalWrite(buzzer, HIGH);
+  delay(100);  // Small delay to let the buzzer beep
+  digitalWrite(buzzer, LOW); // Turn off the buzzer
+
+   pcf8574_ONE_OUTPUT.digitalWrite(i,LOW);
+
+      if(i==randomArray[a]){
+        
+        Serial.println("correct");
+        while(1){
+          val = pcf8574_ONE_INPUT.digitalRead(i);
+          if(val==HIGH){
+            break;
+          }
+          }
+        delay(50);
+        a++;
+        }
+        else{
+          pass=0;
+          break;
+          }
+    }
+    pcf8574_ONE_OUTPUT.digitalWrite(i,HIGH);
+  }
+  delay(50);
+  if(a==arraySize){
+    Serial.println("next ");
+    score++;
+    Score2=score;
+    Display1stScore();
+    FastLED.show();
+    Serial.print("score = ");Serial.println(score);
+    a=0;
+    pass=1;
+    break;
+    }
+    
+  if(pass==0){
+    Serial.println("over");
+    a=0;
+    y = 1;
+    pass=1;
+    score=0;
+    for (int i = 0; i < 8; i++) {
+    pcf8574_ONE_OUTPUT.digitalWrite(i,LOW);
+     }
+    delay(500);
+    for (int i = 0; i < 8; i++) {
+    pcf8574_ONE_OUTPUT.digitalWrite(i,HIGH);
+    }
+    delay(500);
+    startup();
+    break;
+    }
+}
+
+
+  delay(800);  // Add a delay to avoid flooding the serial monitor
+
+}
+
+void Display1stScore()         // this function will display score on LED Board
+{
+  int cursor = 21;          // last led number
+
+  if (Score2 < 10)
+    Fd = 1;
+
+  if (Score2 >= 10 && Score2 < 100)
+    Fd = 2;
+
+  if (Score2 >= 100)
+    Fd = 3;
+
+
+  for (int i = 1; i <= Fd; i++) // Num of digits in Score2 board
+  {
+    int digit = 0;          // get last digit in Score2
+    if (i == 1)             // This will display last digit on Score2 board
+    {
+      cursor = 14;          // inatial position of LED for last digit
+      digit = (Score2 % 10);
+      for (int k = 0; k <= 6; k++) // one digit made from 7 leds1ST_score
+      {
+        if (digits[digit][k] == 1) {
+          leds1ST_score[cursor] = CRGB::Red;
+        }
+        else if (digits[digit][k] == 0) {
+          leds1ST_score[cursor] = 0x000000;
+        };
+        cursor ++;
+      };
+    }
+    else if (i == 2)
+    {
+      cursor = 7;
+      digit = (Score2 / 10 % 10);
+      for (int k = 0; k <= 6; k++) {
+
+        if (digits[digit][k] == 1) {
+          leds1ST_score[cursor] = CRGB::Fuchsia;
+        }
+        else if (digits[digit][k] == 0) {
+          leds1ST_score[cursor] = 0x000000;
+        };
+        cursor ++;
+      };
+
+    }
+    else if (i == 3)
+    {
+
+      cursor = 0;
+      digit = (Score2
+      / 100 % 10);
+      for (int k = 0; k <= 6; k++) {
+
+        if (digits[digit][k] == 1) {
+          leds1ST_score[cursor] = CRGB::Green;
+        }
+        else if (digits[digit][k] == 0) {
+          leds1ST_score[cursor] = 0x000000;
+        };
+        cursor ++;
+      };
+  }
+
+}
+}
+
