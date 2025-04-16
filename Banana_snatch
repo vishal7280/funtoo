@@ -1,0 +1,65 @@
+int ledPins[] = {14, 27, 26, 25, 33, 15, 18, 19, 21, 22, 23, 13}; // Define 12 GPIO pins
+#define START_SWITCH 4 // Define Start Switch GPIO pin
+bool ledsOn = false; // Track LED state
+
+void setup() {
+  Serial.begin(115200);
+  pinMode(START_SWITCH, INPUT_PULLUP);
+
+  // Set all LEDs as outputs and turn them OFF initially
+  for (int i = 0; i < 12; i++) {
+    pinMode(ledPins[i], OUTPUT);
+    digitalWrite(ledPins[i], LOW);
+  }
+  Serial.println("System Ready. Press the button to turn LEDs ON.");
+}
+
+void loop() {
+  // Wait for button press
+  while (digitalRead(START_SWITCH) == HIGH) {
+    delay(100);
+  }
+  
+  delay(200); // Debounce delay
+  
+  if (!ledsOn) {
+    // Turn all LEDs ON
+    Serial.println("Turning all LEDs ON.");
+    for (int i = 0; i < 12; i++) {
+      digitalWrite(ledPins[i], HIGH);
+    }
+    ledsOn = true;
+  } else {
+    // Turn LEDs OFF randomly
+    Serial.println("Turning LEDs OFF randomly...");
+
+    int ledOrder[12];
+    for (int i = 0; i < 12; i++) {
+      ledOrder[i] = i;
+    }
+
+    // Shuffle LED indices randomly using Fisher-Yates shuffle
+    for (int i = 11; i > 0; i--) {
+      int j = random(0, i + 1);
+      int temp = ledOrder[i];
+      ledOrder[i] = ledOrder[j];
+      ledOrder[j] = temp;
+    }
+
+    // Turn off LEDs one by one with delay
+    for (int i = 0; i < 12; i++) {
+      int ledIndex = ledOrder[i];
+      digitalWrite(ledPins[ledIndex], LOW);
+      Serial.print("Turning OFF LED at GPIO: ");
+      Serial.println(ledPins[ledIndex]);
+      delay(30000 / 12); // Delay before next LED turns off
+    }
+
+    ledsOn = false;
+  }
+
+  // Wait for button release
+  while (digitalRead(START_SWITCH) == LOW) {
+    delay(100);
+  }
+}
