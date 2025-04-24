@@ -10,7 +10,7 @@ CRGB leds1ST[NUM_LEDS];
 CRGB ledsTimer[NUM_LEDS];
 
 int Score1;
-int timerSeconds = 600; // 10 minutes
+int timerSeconds = 180; // 10 minutes
 bool timerRunning = false;
 unsigned long lastTimerUpdate = 0;
 
@@ -70,7 +70,7 @@ void loop() {
       if (currentButtonState == LOW) {
         // === Always Reset and Start the Game ===
         timerRunning = true;
-        timerSeconds = 600;
+        timerSeconds = 180;
         laserBlockCount = 0;
         Score1 = 0;
         FastLED.clear();
@@ -98,8 +98,9 @@ void loop() {
       currentPauseState = pauseReading;
 
       if (currentPauseState == LOW && timerRunning) {
-        timerRunning = false;
-        Serial.println("Game Paused");
+        //timerRunning = false;
+        timerSeconds = 180;
+        Serial.println("timerr reset");
       }
     }
   }
@@ -123,8 +124,18 @@ void loop() {
 
     // Laser break detection
     int ldrValue = digitalRead(LDR_PIN);
-    if (ldrValue == LOW && previousState == HIGH) {
+          if(laserBlockCount == 10){
+     timerSeconds = 0;
+
+      }
+    if (ldrValue == LOW && previousState == HIGH && timerSeconds>0) {
       laserBlockCount++;
+      while(1){
+        if(digitalRead(LDR_PIN) == HIGH){
+          break;
+          }
+      }
+
       Score1 = laserBlockCount;
 
       Serial.print("Laser Blocked! Count: ");
@@ -186,7 +197,7 @@ void DisplayTimer(int seconds) {
     }
 
     for (int k = 0; k <= 6; k++) {
-      ledsTimer[cursor] = digits[digit][k] ? CRGB::Red : CRGB::Black;
+      ledsTimer[cursor] = digits[digit][k] ? CRGB::Green : CRGB::Black;
       cursor++;
     }
   }
