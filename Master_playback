@@ -176,6 +176,7 @@ if (digitalRead(song_change) == 0) {
     for (int i = 0; i < 4; i++) {
     pcf8574_ONE_OUTPUT.digitalWrite(i,HIGH);
     }
+    digitalWrite(starts, LOW);
     delay(1500);
     Serial.println("exited loop ");
   }
@@ -369,4 +370,3 @@ void Display1stScore()         // this function will display score on LED Board
 
 }
 }
-
