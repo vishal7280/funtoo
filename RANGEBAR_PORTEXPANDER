@@ -1,0 +1,136 @@
+// --- Pin Definitions ---
+#define DATA_PIN   25   // DS pin of first CD4094
+#define CLOCK_PIN  4    // CP (Clock) shared
+#define STROBE_PIN 14   // STROBE (latch) shared
+
+#define NUM_SHIFT_REGS 7
+#define TOTAL_RGB_LEDS (NUM_SHIFT_REGS * 2)
+
+byte shiftData[NUM_SHIFT_REGS];  // shiftData[0] = 1st shift reg (Q1–Q8)
+
+// === Color Constants (3-bit RGB) ===
+const byte OFF     = 0b000;
+const byte RED     = 0b001;
+const byte GREEN   = 0b010;
+const byte BLUE    = 0b100;
+const byte YELLOW  = RED | GREEN;
+const byte CYAN    = GREEN | BLUE;
+const byte MAGENTA = RED | BLUE;
+const byte WHITE   = RED | GREEN | BLUE;
+
+void setup() {
+  Serial.begin(9600);
+
+  pinMode(DATA_PIN, OUTPUT);
+  pinMode(CLOCK_PIN, OUTPUT);
+  pinMode(STROBE_PIN, OUTPUT);
+
+  clearAll();  // Initially turn everything OFF
+
+  // === Example usage ===
+  setColorToRGB(0, RED);         // 1st RGB (Q1-Q3 of IC0)
+  setColorToRGB(1, GREEN);       // 2nd RGB (Q5-Q7 of IC0)
+  setColorToRGB(2, BLUE);        // 3rd RGB (Q1-Q3 of IC1)
+  setColorToRGB(3, WHITE);       // 4th RGB (Q5-Q7 of IC1)
+  setColorToRGB(4, YELLOW);      // 5th RGB (IC2)
+  setColorToRGB(5, CYAN);        // 6th RGB (IC2)
+  setColorToRGB(6, MAGENTA);     // 7th RGB (IC3)
+  setColorToRGB(7, WHITE);       // 8th RGB (IC3)
+  setColorToRGB(8, RED);         // and so on...
+  setColorToRGB(9, GREEN);
+  setColorToRGB(10, BLUE);
+  setColorToRGB(11, YELLOW);
+  setColorToRGB(12, MAGENTA);
+  setColorToRGB(13, CYAN);
+
+  sendTo4094(shiftData);         // Output everything to the chain
+
+  printShiftData();              // Debug print to Serial Monitor
+}
+
+void loop() {
+  for(int i =0; i<14;i++){
+ setColorToRGB(i, RED);  
+  sendTo4094(shiftData);         // Output everything to the chain
+  delay(50);
+  }
+    for(int i =0; i<14;i++){
+ setColorToRGB(i, BLUE);  
+  sendTo4094(shiftData);         // Output everything to the chain
+  delay(50);
+  }
+    for(int i =0; i<14;i++){
+ setColorToRGB(i, GREEN);  
+  sendTo4094(shiftData);         // Output everything to the chain
+  delay(50);
+  }
+  
+     for(int i =0; i<14;i++){
+ setColorToRGB(i, YELLOW);  
+  sendTo4094(shiftData);         // Output everything to the chain
+  delay(50);
+  }
+       for(int i =0; i<14;i++){
+ setColorToRGB(i, CYAN);  
+  sendTo4094(shiftData);         // Output everything to the chain
+  delay(50);
+  }
+       for(int i =0; i<14;i++){
+ setColorToRGB(i, MAGENTA);  
+  sendTo4094(shiftData);         // Output everything to the chain
+  delay(50);
+  }
+}
+
+// === Set RGB Color for LED 0 to 13 ===
+void setColorToRGB(uint8_t index, byte color) {
+  if (index >= TOTAL_RGB_LEDS) return;
+
+  uint8_t regIndex = index / 2;
+  bool isSecondSet = index % 2; // false = Q1-3, true = Q5-7
+  uint8_t baseBit = isSecondSet ? 4 : 0;
+
+  // Clear existing color bits
+  shiftData[regIndex] &= ~(0b111 << baseBit);
+
+  // Set new color bits
+  shiftData[regIndex] |= ((color & 0b111) << baseBit);
+}
+
+// === Clear all shift registers ===
+void clearAll() {
+  for (int i = 0; i < NUM_SHIFT_REGS; i++) {
+    shiftData[i] = 0;
+  }
+  sendTo4094(shiftData);
+}
+
+// === Send shiftData[] to CD4094 chain ===
+void sendTo4094(byte* data) {
+  digitalWrite(STROBE_PIN, LOW);  // Disable latch while shifting
+
+  // Send data from last register to first (MSB first)
+  for (int i = NUM_SHIFT_REGS - 1; i >= 0; i--) {
+    for (int b = 7; b >= 0; b--) {
+      digitalWrite(CLOCK_PIN, LOW);
+      digitalWrite(DATA_PIN, (data[i] >> b) & 1);
+      digitalWrite(CLOCK_PIN, HIGH);
+    }
+  }
+
+  digitalWrite(STROBE_PIN, HIGH);  // Latch the shifted data
+}
+
+// === Debug Print ===
+void printShiftData() {
+  Serial.println("Shift Register Data (1st to 7th):");
+  for (int i = 0; i < NUM_SHIFT_REGS; i++) {
+    Serial.print("Reg ");
+    Serial.print(i + 1);
+    Serial.print(": 0b");
+    for (int b = 7; b >= 0; b--) {
+      Serial.print((shiftData[i] >> b) & 1);
+    }
+    Serial.println();
+  }
+}
