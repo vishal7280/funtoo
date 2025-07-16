@@ -1,0 +1,191 @@
+// --- Pin Definitions ---
+#define DATA_PIN   26
+#define CLOCK_PIN  23
+#define STROBE_PIN 27
+
+#define NUM_SHIFT_REGS 7
+#define TOTAL_RGB_LEDS (NUM_SHIFT_REGS * 2)
+
+byte shiftData[NUM_SHIFT_REGS];
+
+// === Color Constants ===
+const byte OFF     = 0b000;
+const byte RED     = 0b001;
+const byte GREEN   = 0b010;
+const byte BLUE    = 0b100;
+const byte YELLOW  = RED | GREEN;
+const byte CYAN    = GREEN | BLUE;
+const byte MAGENTA = RED | BLUE;
+const byte WHITE   = RED | GREEN | BLUE;
+
+// === Setup ===
+void setup() {
+  Serial.begin(9600);
+  pinMode(DATA_PIN, OUTPUT);
+  pinMode(CLOCK_PIN, OUTPUT);
+  pinMode(STROBE_PIN, OUTPUT);
+  clearAll();
+}
+
+// === Main Loop ===
+void loop() {
+  // Animate with RED only
+  fillFromStart(RED, 100);
+  fillFromEnd(RED, 100);
+  pingPong(RED, 70);
+  alternateOn(RED, 200);
+  centerToEdge(RED, 120);
+  edgeToCenter(RED, 120);
+  eachBlinkOnce(RED, 80);
+  allFlash(RED, 3, 300);
+
+  // Repeat for BLUE
+  fillFromStart(BLUE, 100);
+  fillFromEnd(BLUE, 100);
+  pingPong(BLUE, 70);
+  alternateOn(BLUE, 200);
+  centerToEdge(BLUE, 120);
+  edgeToCenter(BLUE, 120);
+  eachBlinkOnce(BLUE, 80);
+  allFlash(BLUE, 3, 300);
+}
+
+// === Animation: Fill from start ===
+void fillFromStart(byte color, int delayTime) {
+  clearAll();
+  for (int i = 0; i < TOTAL_RGB_LEDS; i++) {
+    setColorToRGB(i, color);
+    sendTo4094(shiftData);
+    delay(delayTime);
+  }
+  clearAll();
+}
+
+// === Animation: Fill from end ===
+void fillFromEnd(byte color, int delayTime) {
+  clearAll();
+  for (int i = TOTAL_RGB_LEDS - 1; i >= 0; i--) {
+    setColorToRGB(i, color);
+    sendTo4094(shiftData);
+    delay(delayTime);
+  }
+  clearAll();
+}
+
+// === Animation: Ping Pong ===
+void pingPong(byte color, int delayTime) {
+  clearAll();
+  for (int i = 0; i < TOTAL_RGB_LEDS; i++) {
+    clearAll();
+    setColorToRGB(i, color);
+    sendTo4094(shiftData);
+    delay(delayTime);
+  }
+  for (int i = TOTAL_RGB_LEDS - 2; i >= 0; i--) {
+    clearAll();
+    setColorToRGB(i, color);
+    sendTo4094(shiftData);
+    delay(delayTime);
+  }
+}
+
+// === Animation: Alternate Even/Odd ===
+void alternateOn(byte color, int delayTime) {
+  clearAll();
+  for (int r = 0; r < 4; r++) {
+    for (int i = 0; i < TOTAL_RGB_LEDS; i++) {
+      setColorToRGB(i, (i % 2 == r % 2) ? color : OFF);
+    }
+    sendTo4094(shiftData);
+    delay(delayTime);
+  }
+  clearAll();
+}
+
+// === Animation: Center to Edge ===
+void centerToEdge(byte color, int delayTime) {
+  clearAll();
+  int mid = TOTAL_RGB_LEDS / 2;
+  for (int offset = 0; offset <= mid; offset++) {
+    int left = mid - offset;
+    int right = mid + offset - 1;
+    if (left >= 0)  setColorToRGB(left, color);
+    if (right < TOTAL_RGB_LEDS) setColorToRGB(right, color);
+    sendTo4094(shiftData);
+    delay(delayTime);
+  }
+  clearAll();
+}
+
+// === Animation: Edge to Center ===
+void edgeToCenter(byte color, int delayTime) {
+  clearAll();
+  int mid = TOTAL_RGB_LEDS / 2;
+  for (int offset = mid; offset >= 0; offset--) {
+    int left = mid - offset;
+    int right = mid + offset - 1;
+    if (left >= 0)  setColorToRGB(left, color);
+    if (right < TOTAL_RGB_LEDS) setColorToRGB(right, color);
+    sendTo4094(shiftData);
+    delay(delayTime);
+  }
+  clearAll();
+}
+
+// === Animation: Blink each one ===
+void eachBlinkOnce(byte color, int delayTime) {
+  for (int i = 0; i < TOTAL_RGB_LEDS; i++) {
+    clearAll();
+    setColorToRGB(i, color);
+    sendTo4094(shiftData);
+    delay(delayTime);
+  }
+  clearAll();
+}
+
+// === Animation: All Flash N times ===
+void allFlash(byte color, int times, int delayTime) {
+  for (int t = 0; t < times; t++) {
+    for (int i = 0; i < TOTAL_RGB_LEDS; i++) {
+      setColorToRGB(i, color);
+    }
+    sendTo4094(shiftData);
+    delay(delayTime);
+
+    clearAll();
+    delay(delayTime);
+  }
+}
+
+// === Set color to a specific LED ===
+void setColorToRGB(uint8_t index, byte color) {
+  if (index >= TOTAL_RGB_LEDS) return;
+
+  uint8_t regIndex = index / 2;
+  bool isSecondSet = index % 2;
+  uint8_t baseBit = isSecondSet ? 4 : 0;
+
+  shiftData[regIndex] &= ~(0b111 << baseBit);
+  shiftData[regIndex] |= ((color & 0b111) << baseBit);
+}
+
+// === Clear all outputs ===
+void clearAll() {
+  for (int i = 0; i < NUM_SHIFT_REGS; i++) {
+    shiftData[i] = 0;
+  }
+  sendTo4094(shiftData);
+}
+
+// === Send all bytes to CD4094 ===
+void sendTo4094(byte* data) {
+  digitalWrite(STROBE_PIN, LOW);
+  for (int i = NUM_SHIFT_REGS - 1; i >= 0; i--) {
+    for (int b = 7; b >= 0; b--) {
+      digitalWrite(CLOCK_PIN, LOW);
+      digitalWrite(DATA_PIN, (data[i] >> b) & 1);
+      digitalWrite(CLOCK_PIN, HIGH);
+    }
+  }
+  digitalWrite(STROBE_PIN, HIGH);
+}
