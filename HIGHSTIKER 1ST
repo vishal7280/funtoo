@@ -1,0 +1,458 @@
+#include <FastLED.h>
+#include <EEPROM.h>
+#include <SoftwareSerial.h>
+#include "DFRobotDFPlayerMini.h"
+//#include <EEPROM.h>
+//#define EEPROM_SIZE 12
+
+
+//--------------------------------------
+//
+
+// #define LED_COUNT 134
+
+
+#define TIMER_MS 5000
+//----------------------------------------
+SoftwareSerial mySoftwareSerial(33, 32); // RX, TX
+DFRobotDFPlayerMini myDFPlayer;
+
+
+//------------------PINS AND THEIR CONNECTIONS------------------
+
+#define IR_SENSOR_1 35          //// CONNECTED TO SIGNAL1
+#define IR_SENSOR_2 25          //// CONNECTED TO SIGNAL2
+// #define LED_PIN1 18            //// CONNECTED TO RANGE BAR1
+// #define LED_PIN2 27             //// CONNECTED TO RANGE BAR 2
+#define button 34               //// CONNECTED TO BUTTON 3--SW3
+//#define button2 39               //// CONNECTED TO BUTTON 2--SW2
+#define FIRST_SCORE 13          //// CONNECTED TO SCORE-1 
+// #define SECOND_SCORE 14         //// CONNECTED TO SCORE-2   
+// #define HIGH_SCORE 26           //// CONNECTED TO SCORE-3
+
+
+#define DATA_PIN   26   // DS pin of first CD4094
+#define CLOCK_PIN  23    // CP (Clock) shared
+#define STROBE_PIN 27   // STROBE (latch) shared
+
+#define NUM_SHIFT_REGS 7
+#define TOTAL_RGB_LEDS (NUM_SHIFT_REGS * 2)
+
+
+
+//------------------DEFINE NO OF LEDS--------------------------
+
+ #define NUM_LEDS 14            /// NO. TOTAL LED COUNTS IN RGB STRIPS
+#define NUM_LEDS_score 28       /// NO. OF TOTAL SEGMENTS IN SCORE BOARD 
+
+
+
+CRGB leds1[NUM_LEDS];
+CRGB leds2[NUM_LEDS];
+CRGB leds1ST_score[NUM_LEDS_score];    
+CRGB leds2ND_score[NUM_LEDS_score]; 
+CRGB leds_highest_score[NUM_LEDS_score];        
+
+//--------------------------------------------------------------
+int str=25000;  // for adult 
+//int str=5000;  // for women
+//int str=5500;  // for adult child
+
+int pass_ST=0;
+int pass_S1;
+int pass_S2;
+int hue=0;
+int count=0;
+int Turns=0;
+int Raw_score=0;
+int score=0;
+int range_bar_length=0;
+int Score1_Raw=0;
+int Score2_Raw=0;
+int Score1=0;
+int Score2=0;
+int Score3=0;
+int address = 0;
+int Highest_score;
+
+int timer = 0;
+
+
+
+//--------------------intrupt rutiens---------------------------
+// void IRAM_ATTR isr0()
+// {
+//  pass_S1++;
+// }
+// void IRAM_ATTR isr1()
+// {
+//  pass_S2++;
+// }
+// void IRAM_ATTR isr2()
+// {
+// pass_ST=pass_ST+1;
+// }
+
+//---------------------------3segment score board declearation----------------------
+char Fd = 0;
+// int randNumber1;
+
+byte digits[10][7] =  {{1, 1, 1, 1, 1, 1, 0}, // Digit 0
+  {0, 1, 1, 0, 0, 0, 0}, // Digit 1
+  {1, 1, 0, 1, 1, 0, 1}, // Digit 2
+  {1, 1, 1, 1, 0, 0, 1}, // Digit 3
+  {0, 1, 1, 0, 0, 1, 1}, // Digit 4
+  {1, 0, 1, 1, 0, 1, 1}, // Digit 5
+  {1, 0, 1, 1, 1, 1, 1}, // Digit 6
+  {1, 1, 1, 0, 0, 0, 0}, // Digit 7
+  {1, 1, 1, 1, 1, 1, 1}, // Digit 8
+  {1, 1, 1, 1, 0, 1, 1} // Digit 9
+};                  // 2D Array for numbers on 7 segment
+
+byte shiftData[NUM_SHIFT_REGS];  // shiftData[0] = 1st shift reg (Q1–Q8)
+
+// === Color Constants (3-bit RGB) ===
+const byte OFF     = 0b000;
+const byte RED     = 0b001;
+const byte GREEN   = 0b010;
+const byte BLUE    = 0b100;
+const byte YELLOW  = RED | GREEN;
+const byte CYAN    = GREEN | BLUE;
+const byte MAGENTA = RED | BLUE;
+const byte WHITE   = RED | GREEN | BLUE;
+
+
+
+//----------------------------------------------------------------------------------
+
+
+void setup() {
+  Serial.begin(115200);
+  //EEPROM.begin(EEPROM_SIZE);
+   mySoftwareSerial.begin(9600);
+   myDFPlayer.begin(mySoftwareSerial);
+   myDFPlayer.volume(35);
+  //  randNumber1=3;
+  pinMode(IR_SENSOR_1,INPUT_PULLUP);
+  pinMode(IR_SENSOR_2,INPUT_PULLUP);
+  pinMode(button,INPUT_PULLUP);
+  //pinMode(button2,INPUT_PULLUP);
+
+  pinMode(DATA_PIN, OUTPUT);
+  pinMode(CLOCK_PIN, OUTPUT);
+  pinMode(STROBE_PIN, OUTPUT);
+
+  clearAll();  // Initially turn everything OFF
+
+  // === Example usage ===
+  setColorToRGB(0, RED);         // 1st RGB (Q1-Q3 of IC0)
+  setColorToRGB(1, GREEN);       // 2nd RGB (Q5-Q7 of IC0)
+  setColorToRGB(2, BLUE);        // 3rd RGB (Q1-Q3 of IC1)
+  setColorToRGB(3, WHITE);       // 4th RGB (Q5-Q7 of IC1)
+  setColorToRGB(4, YELLOW);      // 5th RGB (IC2)
+  setColorToRGB(5, CYAN);        // 6th RGB (IC2)
+  setColorToRGB(6, MAGENTA);     // 7th RGB (IC3)
+  setColorToRGB(7, WHITE);       // 8th RGB (IC3)
+  setColorToRGB(8, RED);         // and so on...
+  setColorToRGB(9, GREEN);
+  setColorToRGB(10, BLUE);
+  setColorToRGB(11, YELLOW);
+  setColorToRGB(12, MAGENTA);
+  setColorToRGB(13, CYAN);
+
+  sendTo4094(shiftData);         // Output everything to the chain
+
+  printShiftData();              // Debug print to Serial Monitor
+
+
+
+
+  //-------------------------
+
+  //------------------
+
+
+  //FastLED.addLeds<WS2812B, LED_PIN1, RGB>(leds1, NUM_LEDS);
+ 
+  
+  FastLED.addLeds<WS2812B, FIRST_SCORE, RGB>(leds1ST_score, NUM_LEDS_score);
+  //FastLED.addLeds<WS2812B, SECOND_SCORE, RGB>(leds2ND_score, NUM_LEDS_score);
+  //FastLED.addLeds<WS2812B, HIGH_SCORE, RGB>(leds_highest_score, NUM_LEDS_score);
+  
+  FastLED.setBrightness(255);
+  myDFPlayer.advertise(1);     // advertise audio
+  delay(1000);
+  pass_ST=0;
+  start_up();                      // START_UP EFFECT IN LOOP 
+
+
+ 
+
+ 
+  
+    
+
+      
+
+}
+
+ void start_up(){
+ pass_ST=0;
+
+ hue=0;
+ count=0;
+ Turns=0;
+ Raw_score=0;
+ score=0;
+ range_bar_length=0;
+ Score1_Raw=0;
+ 
+ Score2_Raw=0;
+ Score1=0;
+ Score2=0;
+ Score3=0;
+ address = 0;
+ timer = 0;
+  
+  
+  while(1){ 
+    
+for (int i = 0; i < NUM_LEDS; i++) {
+  setColorToRGB(i, RED);  
+  sendTo4094(shiftData);         // Output everything to the chain
+    // delay(10);
+  }
+
+
+   
+  pass_ST=digitalRead(IR_SENSOR_1);
+  if(pass_ST==1){
+    break;
+    }
+}
+Serial.println("while loop break");
+
+
+    for (int i = NUM_LEDS ; i >= 0.; i--) {
+     FastLED.show(); setColorToRGB(i, WHITE);  
+  sendTo4094(shiftData);         // Output everything to the chain
+  delay(5);
+    }
+            
+    for (int i = 0; i < NUM_LEDS_score ; i++){
+      setColorToRGB(i, WHITE);  
+  sendTo4094(shiftData);         // Output everything to the chain
+  delay(5);
+      
+      
+    }
+
+        for (int i = 0; i < 1 ; i++){
+          setColorToRGB(i, GREEN);  
+  sendTo4094(shiftData);         // Output everything to the chain
+  delay(10);
+            
+    }
+
+      
+}
+void loop() {
+  pass_S1=digitalRead(IR_SENSOR_1); 
+pass_S2=digitalRead(IR_SENSOR_2);
+
+
+    
+
+
+  if(pass_S1==0){   
+    //Serial.println("ir one pass");      //---------------------------count starts with first sensor 
+    count++;
+    
+    if(pass_S2==0){                       //---------------------------second sensor hit and count stops 
+    Serial.println("ir two pass");
+   
+    Serial.print("COUNT= ");
+    Serial.println(count);
+    
+    if(count>str){                      
+      count=str;
+      }
+    Raw_score=str-count;
+    score= map(count,str,0,0,999);
+    
+    if(score>735 && score<755){                      
+      score=score*1.04;
+      }
+      else if(score>755 && score<765){                      
+      score=score*1.02;
+      }
+      else if(score>765 && score<775){                      
+      score=score*1.08;
+      }
+       else if(score>775 ){                      
+      score=score*1.1;
+      }
+ 
+    range_bar_length=score/77;
+    if(score==0){
+      score=10;
+      range_bar_length=1;
+      }
+    Serial.print("Score= ");
+    Serial.println(score);
+    Serial.print("range_bar_length= ");
+    Serial.println(range_bar_length);
+    
+
+  for (int j = 0; j < range_bar_length; j++) {
+   setColorToRGB(j, GREEN);  
+      sendTo4094(shiftData);
+
+    delay(1000); 
+  }
+  
+for(int i=0;i<score;i++){
+  Score1=i;
+  Display1stScore();
+  FastLED.show();
+  delay(1);
+  }
+  //myDFPlayer.pause();
+
+       
+
+         
+      
+    
+    delay(5000);
+    start_up(); 
+    }
+  }
+
+    
+    }
+
+
+
+
+
+    // === Set RGB Color for LED 0 to 13 ===
+void setColorToRGB(uint8_t index, byte color) {
+  if (index >= TOTAL_RGB_LEDS) return;
+
+  uint8_t regIndex = index / 2;
+  bool isSecondSet = index % 2; // false = Q1-3, true = Q5-7
+  uint8_t baseBit = isSecondSet ? 4 : 0;
+
+  // Clear existing color bits
+  shiftData[regIndex] &= ~(0b111 << baseBit);
+
+  // Set new color bits
+  shiftData[regIndex] |= ((color & 0b111) << baseBit);
+}
+
+// === Clear all shift registers ===
+void clearAll() {
+  for (int i = 0; i < NUM_SHIFT_REGS; i++) {
+    shiftData[i] = 0;
+  }
+  sendTo4094(shiftData);
+}
+
+// === Send shiftData[] to CD4094 chain ===
+void sendTo4094(byte* data) {
+  digitalWrite(STROBE_PIN, LOW);  // Disable latch while shifting
+
+  // Send data from last register to first (MSB first)
+  for (int i = NUM_SHIFT_REGS - 1; i >= 0; i--) {
+    for (int b = 7; b >= 0; b--) {
+      digitalWrite(CLOCK_PIN, LOW);
+      digitalWrite(DATA_PIN, (data[i] >> b) & 1);
+      digitalWrite(CLOCK_PIN, HIGH);
+    }
+  }
+
+  digitalWrite(STROBE_PIN, HIGH);  // Latch the shifted data
+}
+
+// === Debug Print ===
+void printShiftData() {
+  Serial.println("Shift Register Data (1st to 7th):");
+  for (int i = 0; i < NUM_SHIFT_REGS; i++) {
+    Serial.print("Reg ");
+    Serial.print(i + 1);
+    Serial.print(": 0b");
+    for (int b = 7; b >= 0; b--) {
+      Serial.print((shiftData[i] >> b) & 1);
+    }
+    Serial.println();
+  }
+}
+
+
+void setSpecificLEDColor(uint8_t ledIndex, byte color) {
+  if (ledIndex >= TOTAL_RGB_LEDS) return;
+
+  setColorToRGB(ledIndex, color);
+  sendTo4094(shiftData);
+}
+
+
+    
+
+
+
+
+void Display1stScore()
+{
+  int cursor = NUM_LEDS_score - 1; // last led number
+
+  if (Score1 < 10)
+    Fd = 1;
+  else if (Score1 >= 10 && Score1 < 100)
+    Fd = 2;
+  else if (Score1 >= 100 && Score1 < 1000)
+    Fd = 3;
+  else if (Score1 >= 1000)
+    Fd = 4;
+
+  for (int i = 1; i <= Fd; i++)
+  {
+    int digit = 0;
+    if (i == 1)
+    {
+      cursor = NUM_LEDS_score - 7; // initial position of LED for last digit
+      digit = (Score1 % 10);
+    }
+    else if (i == 2)
+    {
+      cursor = NUM_LEDS_score - 14;
+      digit = (Score1 / 10 % 10);
+    }
+    else if (i == 3)
+    {
+      cursor = NUM_LEDS_score - 21;
+      digit = (Score1 / 100 % 10);
+    }
+    else if (i == 4)
+    {
+      cursor = 0;
+      digit = (Score1 / 1000 % 10);
+    }
+
+    for (int k = 0; k <= 6; k++)
+    {
+      if (digits[digit][k] == 1)
+      {
+        leds1ST_score[cursor] = CRGB::Blue;
+      }
+      else if (digits[digit][k] == 0)
+      {
+        leds1ST_score[cursor] = 0x000000;
+      };
+      cursor++;
+    }
+  }
+}
+
+  
